@@ -22,7 +22,9 @@ type UploadState =
   | { status: "error"; message: string };
 
 export default function UploadScreen() {
-  const [uploadState, setUploadState] = useState<UploadState>({ status: "idle" });
+  const [uploadState, setUploadState] = useState<UploadState>({
+    status: "idle",
+  });
 
   const getUploadUrl = useAction(api.r2.getUploadUrl);
   const createWorkout = useMutation(api.workouts.createWorkout);
@@ -38,16 +40,10 @@ export default function UploadScreen() {
   );
 
   // Transition from processing → done when Convex marks it ready
-  if (
-    uploadState.status === "processing" &&
-    workout?.status === "ready"
-  ) {
+  if (uploadState.status === "processing" && workout?.status === "ready") {
     setUploadState({ status: "done", workoutId: uploadState.workoutId });
   }
-  if (
-    uploadState.status === "processing" &&
-    workout?.status === "failed"
-  ) {
+  if (uploadState.status === "processing" && workout?.status === "failed") {
     setUploadState({
       status: "error",
       message: workout.errorMessage ?? "Processing failed",
@@ -55,6 +51,7 @@ export default function UploadScreen() {
   }
 
   async function handlePickAndUpload() {
+    console.log("[Upload] handlePickAndUpload called");
     try {
       setUploadState({ status: "picking" });
 
@@ -76,32 +73,49 @@ export default function UploadScreen() {
       setUploadState({ status: "uploading", progress: "Getting upload URL…" });
 
       // 1. Get presigned R2 upload URL
-      const { uploadUrl, videoUrl } = await getUploadUrl({ filename, contentType });
+      console.log("[Upload] Getting presigned URL...");
+      const { uploadUrl, videoUrl } = await getUploadUrl({
+        filename,
+        contentType,
+      });
+      console.log("[Upload] Got URL, videoUrl:", videoUrl);
 
       setUploadState({ status: "uploading", progress: "Uploading video…" });
 
       // 2. Upload directly to R2
+      console.log("[Upload] Fetching local asset blob...");
+      const blob = await fetch(asset.uri).then((r) => r.blob());
+      console.log("[Upload] Blob size:", blob.size, "type:", blob.type);
+
+      console.log("[Upload] PUTting to R2...");
       const uploadResponse = await fetch(uploadUrl, {
         method: "PUT",
-        body: await fetch(asset.uri).then((r) => r.blob()),
+        body: blob,
         headers: { "Content-Type": contentType },
       });
+      console.log("[Upload] R2 response:", uploadResponse.status, uploadResponse.statusText);
 
       if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+        const responseText = await uploadResponse.text();
+        console.error("[Upload] R2 error body:", responseText);
+        throw new Error(`Upload failed (${uploadResponse.status}): ${responseText}`);
       }
 
       setUploadState({ status: "uploading", progress: "Starting processing…" });
 
       // 3. Create workout record in Convex — triggers background processing
+      console.log("[Upload] Creating workout in Convex...");
       const newWorkoutId = await createWorkout({
         weekOf: new Date().toISOString().split("T")[0],
         videoUrl,
       });
+      console.log("[Upload] Workout created:", newWorkoutId);
 
       setUploadState({ status: "processing", workoutId: newWorkoutId });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      console.error("[Upload] Error:", err);
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
       setUploadState({ status: "error", message });
       Alert.alert("Upload failed", message);
     }
@@ -126,9 +140,7 @@ export default function UploadScreen() {
         </>
       )}
 
-      {uploadState.status === "picking" && (
-        <ActivityIndicator size="large" />
-      )}
+      {uploadState.status === "picking" && <ActivityIndicator size="large" />}
 
       {uploadState.status === "uploading" && (
         <View style={styles.statusContainer}>
@@ -148,12 +160,15 @@ export default function UploadScreen() {
       {uploadState.status === "done" && workout && (
         <View style={styles.statusContainer}>
           <Text style={styles.successText}>✓ Workout ready!</Text>
-          <Text style={styles.statusText}>{workout.exercises?.length ?? 0} exercises extracted</Text>
+          <Text style={styles.statusText}>
+            {workout.exercises?.length ?? 0} exercises extracted
+          </Text>
           {workout.exercises?.map((ex) => (
             <View key={ex._id} style={styles.exerciseRow}>
               <Text style={styles.exerciseName}>{ex.name}</Text>
               <Text style={styles.exerciseMeta}>
-                {ex.sets} sets × {ex.reps ? `${ex.reps} reps` : `${ex.durationSeconds}s`}
+                {ex.sets} sets ×{" "}
+                {ex.reps ? `${ex.reps} reps` : `${ex.durationSeconds}s`}
               </Text>
             </View>
           ))}

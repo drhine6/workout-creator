@@ -33,7 +33,8 @@ export const getUploadUrl = action({
     });
 
     const uploadUrl = await getSignedUrl(client, command, { expiresIn: 3600 });
-    const videoUrl = `https://${process.env.R2_PUBLIC_DOMAIN}/${key}`;
+    const domain = process.env.R2_PUBLIC_DOMAIN!.replace(/^https?:\/\//, "");
+    const videoUrl = `https://${domain}/${key}`;
 
     return { uploadUrl, videoUrl, key };
   },
