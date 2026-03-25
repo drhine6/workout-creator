@@ -4,12 +4,12 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -82,24 +82,27 @@ export default function UploadScreen() {
 
       setUploadState({ status: "uploading", progress: "Uploading video…" });
 
-      // 2. Upload directly to R2
-      console.log("[Upload] Fetching local asset blob...");
-      const blob = await fetch(asset.uri).then((r) => r.blob());
-      console.log("[Upload] Blob size:", blob.size, "type:", blob.type);
-
-      console.log("[Upload] PUTting to R2...");
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "PUT",
-        body: blob,
-        headers: { "Content-Type": contentType },
+      // 2. Upload directly to R2 via XMLHttpRequest (fetch fails with large blobs in RN)
+      console.log("[Upload] Starting R2 upload via XHR...");
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", contentType);
+        xhr.onload = () => {
+          console.log("[Upload] R2 response:", xhr.status);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => {
+          console.error("[Upload] XHR error:", xhr.responseText);
+          reject(new Error("Network request failed during upload"));
+        };
+        xhr.send({ uri: asset.uri, type: contentType, name: filename } as any);
       });
-      console.log("[Upload] R2 response:", uploadResponse.status, uploadResponse.statusText);
-
-      if (!uploadResponse.ok) {
-        const responseText = await uploadResponse.text();
-        console.error("[Upload] R2 error body:", responseText);
-        throw new Error(`Upload failed (${uploadResponse.status}): ${responseText}`);
-      }
+      console.log("[Upload] R2 upload complete");
 
       setUploadState({ status: "uploading", progress: "Starting processing…" });
 

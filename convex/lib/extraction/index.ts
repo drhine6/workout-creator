@@ -73,7 +73,7 @@ export async function extractWorkout(
 ): Promise<WorkoutExtraction> {
   const client = new OpenAI({ apiKey });
 
-  const completion = await client.beta.chat.completions.parse({
+  const completion = await client.chat.completions.parse({
     model: "gpt-4o",
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

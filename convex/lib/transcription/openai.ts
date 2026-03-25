@@ -12,9 +12,7 @@ export class OpenAITranscriptionProvider implements TranscriptionProvider {
     // Fetch the audio file from the URL (e.g. Cloudflare R2)
     const response = await fetch(audioUrl);
     if (!response.ok) {
-      throw new Error(
-        `Failed to fetch audio from URL: ${response.statusText}`
-      );
+      throw new Error(`Failed to fetch audio from URL: ${response.statusText}`);
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -23,7 +21,7 @@ export class OpenAITranscriptionProvider implements TranscriptionProvider {
     const transcription = await this.client.audio.transcriptions.create({
       file,
       model: "gpt-4o-transcribe",
-      response_format: "verbose_json",
+      response_format: "json",
       // Hint the model toward fitness/PT terminology
       prompt:
         "This is a personal trainer explaining exercises to a client. " +
@@ -32,11 +30,6 @@ export class OpenAITranscriptionProvider implements TranscriptionProvider {
 
     return {
       text: transcription.text,
-      segments: transcription.segments?.map((seg) => ({
-        start: seg.start,
-        end: seg.end,
-        text: seg.text,
-      })),
     };
   }
 }
